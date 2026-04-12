@@ -183,7 +183,7 @@ function toggleHero(h) {
       if (myHero) allies = allies.filter(a => a.k !== myHero.k);
       myHero = h;
       mode = 'ally';
-      document.getElementById('mode-row').style.display = 'flex';
+      document.getElementById('mode-row').style.display = 'flex'; setMode('ally');
     } else if (mode === 'ally') {
       if (allies.length < 4) {
        allies.push(h);
