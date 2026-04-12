@@ -185,7 +185,9 @@ function toggleHero(h) {
       mode = 'ally';
       document.getElementById('mode-row').style.display = 'flex';
     } else if (mode === 'ally') {
-      if (allies.length < 4) allies.push(h);
+      if (allies.length < 4) {
+       allies.push(h);
+       if (allies.length === 4) setMode('enemy');
     } else if (mode === 'enemy') {
       if (enemies.length < 5) enemies.push(h);
     }
