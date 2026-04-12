@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>Dota 2 Draft Picker</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{background:var(--tg-theme-bg-color,#1a1a2e);color:var(--tg-theme-text-color,#e0e0e0);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh}
+  .header{padding:12px 14px 8px;background:var(--tg-theme-secondary-bg-color,#1e2433);border-bottom:1px solid rgba(255,255,255,0.08)}
+  .step-row{display:flex;gap:6px;margin-bottom:8px}
+  .step{flex:1;text-align:center;font-size:11px;padding:5px 4px;border-radius:8px;font-weight:600;transition:all .2s}
+  .step.done{background:#0F6E56;color:#9FE1CB}
+  .step.active{background:#534AB7;color:#CECBF6}
+  .step.todo{background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.35)}
+  .step-hint{font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:8px}
+  .step-hint span{color:var(--tg-theme-link-color,#7F77DD);font-weight:600}
+  .mode-row{display:flex;gap:6px;margin-bottom:8px}
+  .mode-btn{flex:1;padding:6px;border-radius:8px;border:none;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
+  .mode-btn.ally{background:#085041;color:#9FE1CB}
+  .mode-btn.enemy{background:#791F1F;color:#F7C1C1}
+  .mode-btn.inactive{background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.3)}
+  .search-bar{display:flex;align-items:center;background:rgba(255,255,255,0.07);border-radius:10px;padding:0 10px;gap:8px}
+  .search-bar input{background:none;border:none;outline:none;flex:1;color:var(--tg-theme-text-color,#e0e0e0);font-size:13px;padding:8px 0}
+  .search-bar input::placeholder{color:rgba(255,255,255,0.3)}
+  .attr-tabs{display:flex;background:rgba(255,255,255,0.05);border-radius:8px;margin:10px 14px 0;overflow:hidden}
+  .attr-tab{flex:1;text-align:center;padding:7px 4px;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;color:rgba(255,255,255,0.4)}
+  .attr-tab.active{background:#534AB7;color:#fff;border-radius:7px}
+  .hero-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;padding:10px 14px;max-height:calc(100vh - 340px);overflow-y:auto}
+  .hero-card{border-radius:8px;overflow:hidden;border:2px solid transparent;cursor:pointer;transition:all .15s;position:relative;background:#111827}
+  .hero-card:active{transform:scale(0.92)}
+  .hero-card.selected-me{border-color:#EF9F27;box-shadow:0 0 0 1px #EF9F27}
+  .hero-card.selected-ally{border-color:#1D9E75;box-shadow:0 0 0 1px #1D9E75}
+  .hero-card.selected-enemy{border-color:#E24B4A;box-shadow:0 0 0 1px #E24B4A}
+  .hero-card img{width:100%;display:block;aspect-ratio:1;object-fit:cover}
+  .hero-card .fallback{width:100%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:8px;color:rgba(255,255,255,0.3);text-align:center;padding:4px;line-height:1.2;background:#1e2433}
+  .hero-name{font-size:7.5px;text-align:center;padding:2px 2px 3px;color:rgba(255,255,255,0.6);background:#0d1117;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .badge{position:absolute;top:2px;right:2px;width:14px;height:14px;border-radius:50%;font-size:8px;display:flex;align-items:center;justify-content:center;font-weight:700;line-height:1}
+  .badge.me{background:#EF9F27;color:#000}
+  .badge.ally{background:#1D9E75;color:#fff}
+  .badge.enemy{background:#E24B4A;color:#fff}
+  .selected-bar{padding:8px 14px;background:var(--tg-theme-secondary-bg-color,#1e2433);border-top:1px solid rgba(255,255,255,0.08)}
+  .sel-row{display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap}
+  .sel-label{font-size:10px;color:rgba(255,255,255,0.4);white-space:nowrap}
+  .sel-chip{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:500;white-space:nowrap}
+  .sel-chip.me{background:#412402;color:#FAC775}
+  .sel-chip.ally{background:#085041;color:#9FE1CB}
+  .sel-chip.enemy{background:#791F1F;color:#F7C1C1}
+  .sel-chip.empty{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.25)}
+  .bottom-btn{margin:8px 14px;padding:12px;background:#534AB7;color:#fff;border:none;border-radius:12px;width:calc(100% - 28px);font-size:14px;font-weight:700;cursor:pointer;transition:all .15s}
+  .bottom-btn:disabled{background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.3);cursor:not-allowed}
+  .bottom-btn:not(:disabled):active{transform:scale(0.98)}
+  .empty-state{grid-column:1/-1;text-align:center;padding:30px 0;color:rgba(255,255,255,0.25);font-size:13px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="step-row">
+    <div class="step" id="step-me">1. My hero</div>
+    <div class="step" id="step-allies">2. Allies (0/4)</div>
+    <div class="step" id="step-enemies">3. Enemies (0/5)</div>
+  </div>
+  <div class="step-hint" id="hint">Pick <span>your carry hero</span> first</div>
+  <div class="mode-row" id="mode-row" style="display:none">
+    <button class="mode-btn ally" id="btn-ally" onclick="setMode('ally')">+ Ally</button>
+    <button class="mode-btn enemy inactive" id="btn-enemy" onclick="setMode('enemy')">+ Enemy</button>
+  </div>
+  <div class="search-bar">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input type="text" id="search" placeholder="Search hero..." oninput="renderGrid()"/>
+  </div>
+</div>
+
+<div class="attr-tabs">
+  <div class="attr-tab active" onclick="setAttr('ALL')">All</div>
+  <div class="attr-tab" onclick="setAttr('STR')">STR</div>
+  <div class="attr-tab" onclick="setAttr('AGI')">AGI</div>
+  <div class="attr-tab" onclick="setAttr('INT')">INT</div>
+  <div class="attr-tab" onclick="setAttr('UNI')">UNI</div>
+</div>
+
+<div class="hero-grid" id="grid"></div>
+
+<div class="selected-bar">
+  <div class="sel-row"><span class="sel-label">Me:</span><span id="chip-me" class="sel-chip empty">not picked</span></div>
+  <div class="sel-row"><span class="sel-label">Allies:</span><span id="chips-allies"></span></div>
+  <div class="sel-row"><span class="sel-label">Enemies:</span><span id="chips-enemies"></span></div>
+</div>
+<button class="bottom-btn" id="confirm-btn" onclick="confirm()" disabled>Select your hero first</button>
+
+<script>
+const HEROES = [
+  // STR
+  {k:'abaddon',n:'Abaddon',a:'STR'},{k:'alchemist',n:'Alchemist',a:'STR'},{k:'axe',n:'Axe',a:'STR'},
+  {k:'beastmaster',n:'Beastmaster',a:'STR'},{k:'brewmaster',n:'Brewmaster',a:'STR'},{k:'bristleback',n:'Bristleback',a:'STR'},
+  {k:'centaur',n:'Centaur',a:'STR'},{k:'chaos_knight',n:'Chaos Knight',a:'STR'},{k:'doom_bringer',n:'Doom',a:'STR'},
+  {k:'dragon_knight',n:'Dragon Knight',a:'STR'},{k:'earth_spirit',n:'Earth Spirit',a:'STR'},{k:'earthshaker',n:'Earthshaker',a:'STR'},
+  {k:'elder_titan',n:'Elder Titan',a:'STR'},{k:'huskar',n:'Huskar',a:'STR'},{k:'wisp',n:'Io',a:'STR'},
+  {k:'kunkka',n:'Kunkka',a:'STR'},{k:'legion_commander',n:'Legion Cmd',a:'STR'},{k:'life_stealer',n:'Lifestealer',a:'STR'},
+  {k:'lycan',n:'Lycan',a:'STR'},{k:'magnataur',n:'Magnus',a:'STR'},{k:'mars',n:'Mars',a:'STR'},
+  {k:'night_stalker',n:'Night Stalker',a:'STR'},{k:'ogre_magi',n:'Ogre Magi',a:'STR'},{k:'omniknight',n:'Omniknight',a:'STR'},
+  {k:'phoenix',n:'Phoenix',a:'STR'},{k:'pudge',n:'Pudge',a:'STR'},{k:'sand_king',n:'Sand King',a:'STR'},
+  {k:'slardar',n:'Slardar',a:'STR'},{k:'snapfire',n:'Snapfire',a:'STR'},{k:'spirit_breaker',n:'Spirit Breaker',a:'STR'},
+  {k:'sven',n:'Sven',a:'STR'},{k:'tidehunter',n:'Tidehunter',a:'STR'},{k:'shredder',n:'Timbersaw',a:'STR'},
+  {k:'tiny',n:'Tiny',a:'STR'},{k:'treant_protector',n:'Treant',a:'STR'},{k:'tusk',n:'Tusk',a:'STR'},
+  {k:'abyssal_underlord',n:'Underlord',a:'STR'},{k:'undying',n:'Undying',a:'STR'},{k:'skeleton_king',n:'Wraith King',a:'STR'},
+  // AGI
+  {k:'antimage',n:'Anti-Mage',a:'AGI'},{k:'arc_warden',n:'Arc Warden',a:'AGI'},{k:'bloodseeker',n:'Bloodseeker',a:'AGI'},
+  {k:'bounty_hunter',n:'Bounty Hunter',a:'AGI'},{k:'broodmother',n:'Broodmother',a:'AGI'},{k:'clinkz',n:'Clinkz',a:'AGI'},
+  {k:'drow_ranger',n:'Drow Ranger',a:'AGI'},{k:'ember_spirit',n:'Ember Spirit',a:'AGI'},{k:'faceless_void',n:'Faceless Void',a:'AGI'},
+  {k:'gyrocopter',n:'Gyrocopter',a:'AGI'},{k:'hoodwink',n:'Hoodwink',a:'AGI'},{k:'juggernaut',n:'Juggernaut',a:'AGI'},
+  {k:'luna',n:'Luna',a:'AGI'},{k:'medusa',n:'Medusa',a:'AGI'},{k:'meepo',n:'Meepo',a:'AGI'},
+  {k:'mirana',n:'Mirana',a:'AGI'},{k:'monkey_king',n:'Monkey King',a:'AGI'},{k:'morphling',n:'Morphling',a:'AGI'},
+  {k:'naga_siren',n:'Naga Siren',a:'AGI'},{k:'nyx_assassin',n:'Nyx Assassin',a:'AGI'},{k:'pangolier',n:'Pangolier',a:'AGI'},
+  {k:'phantom_assassin',n:'Phantom Assassin',a:'AGI'},{k:'phantom_lancer',n:'Phantom Lancer',a:'AGI'},{k:'razor',n:'Razor',a:'AGI'},
+  {k:'riki',n:'Riki',a:'AGI'},{k:'nevermore',n:'Shadow Fiend',a:'AGI'},{k:'slark',n:'Slark',a:'AGI'},
+  {k:'sniper',n:'Sniper',a:'AGI'},{k:'spectre',n:'Spectre',a:'AGI'},{k:'templar_assassin',n:'Templar Assassin',a:'AGI'},
+  {k:'terrorblade',n:'Terrorblade',a:'AGI'},{k:'troll_warlord',n:'Troll Warlord',a:'AGI'},{k:'ursa',n:'Ursa',a:'AGI'},
+  {k:'vengefulspirit',n:'Vengeful Spirit',a:'AGI'},{k:'viper',n:'Viper',a:'AGI'},{k:'visage',n:'Visage',a:'AGI'},
+  {k:'void_spirit',n:'Void Spirit',a:'AGI'},{k:'weaver',n:'Weaver',a:'AGI'},{k:'windrunner',n:'Windranger',a:'AGI'},
+  // INT
+  {k:'ancient_apparition',n:'Ancient App.',a:'INT'},{k:'bane',n:'Bane',a:'INT'},{k:'batrider',n:'Batrider',a:'INT'},
+  {k:'chen',n:'Chen',a:'INT'},{k:'crystal_maiden',n:'Crystal Maiden',a:'INT'},{k:'dark_seer',n:'Dark Seer',a:'INT'},
+  {k:'dark_willow',n:'Dark Willow',a:'INT'},{k:'dazzle',n:'Dazzle',a:'INT'},{k:'death_prophet',n:'Death Prophet',a:'INT'},
+  {k:'disruptor',n:'Disruptor',a:'INT'},{k:'enchantress',n:'Enchantress',a:'INT'},{k:'enigma',n:'Enigma',a:'INT'},
+  {k:'grimstroke',n:'Grimstroke',a:'INT'},{k:'invoker',n:'Invoker',a:'INT'},{k:'jakiro',n:'Jakiro',a:'INT'},
+  {k:'keeper_of_the_light',n:'KOTL',a:'INT'},{k:'leshrac',n:'Leshrac',a:'INT'},{k:'lich',n:'Lich',a:'INT'},
+  {k:'lina',n:'Lina',a:'INT'},{k:'lion',n:'Lion',a:'INT'},{k:'furion',n:"Nature's Prophet",a:'INT'},
+  {k:'necrolyte',n:'Necrophos',a:'INT'},{k:'obsidian_destroyer',n:'OD',a:'INT'},{k:'oracle',n:'Oracle',a:'INT'},
+  {k:'puck',n:'Puck',a:'INT'},{k:'pugna',n:'Pugna',a:'INT'},{k:'queenofpain',n:'Queen of Pain',a:'INT'},
+  {k:'rattletrap',n:'Clockwerk',a:'INT'},{k:'rubick',n:'Rubick',a:'INT'},{k:'shadow_demon',n:'Shadow Demon',a:'INT'},
+  {k:'shadow_shaman',n:'Shadow Shaman',a:'INT'},{k:'silencer',n:'Silencer',a:'INT'},{k:'skywrath_mage',n:'Skywrath Mage',a:'INT'},
+  {k:'storm_spirit',n:'Storm Spirit',a:'INT'},{k:'techies',n:'Techies',a:'INT'},{k:'tinker',n:'Tinker',a:'INT'},
+  {k:'venomancer',n:'Venomancer',a:'INT'},{k:'warlock',n:'Warlock',a:'INT'},{k:'winter_wyvern',n:'Winter Wyvern',a:'INT'},
+  {k:'witch_doctor',n:'Witch Doctor',a:'INT'},{k:'zuus',n:'Zeus',a:'INT'},
+  // UNI
+  {k:'dawnbreaker',n:'Dawnbreaker',a:'UNI'},{k:'lone_druid',n:'Lone Druid',a:'UNI'},{k:'marci',n:'Marci',a:'UNI'},
+  {k:'muerta',n:'Muerta',a:'UNI'},{k:'primal_beast',n:'Primal Beast',a:'UNI'},{k:'ringmaster',n:'Ringmaster',a:'UNI'},
+];
+
+const CDN = k => `https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/${k}.png`;
+
+let myHero = null;
+let allies = [];
+let enemies = [];
+let mode = 'me'; // 'me' | 'ally' | 'enemy'
+let currentAttr = 'ALL';
+
+function setAttr(a) {
+  currentAttr = a;
+  document.querySelectorAll('.attr-tab').forEach((t,i) => {
+    t.classList.toggle('active', ['ALL','STR','AGI','INT','UNI'][i] === a);
+  });
+  renderGrid();
+}
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('btn-ally').className = 'mode-btn ' + (m==='ally'?'ally':'inactive ally');
+  document.getElementById('btn-enemy').className = 'mode-btn ' + (m==='enemy'?'enemy':'inactive enemy');
+  updateHint();
+}
+
+function heroKey(h) { return h ? h.k : null; }
+
+function isSelected(h) {
+  if (myHero && h.k === myHero.k) return 'me';
+  if (allies.find(a => a.k === h.k)) return 'ally';
+  if (enemies.find(e => e.k === h.k)) return 'enemy';
+  return null;
+}
+
+function toggleHero(h) {
+  const sel = isSelected(h);
+
+  if (sel === 'me') { myHero = null; mode = 'me'; }
+  else if (sel === 'ally') { allies = allies.filter(a => a.k !== h.k); }
+  else if (sel === 'enemy') { enemies = enemies.filter(e => e.k !== h.k); }
+  else {
+    if (mode === 'me') {
+      if (myHero) allies = allies.filter(a => a.k !== myHero.k);
+      myHero = h;
+      mode = 'ally';
+      document.getElementById('mode-row').style.display = 'flex';
+    } else if (mode === 'ally') {
+      if (allies.length < 4) {
+        allies.push(h);
+        if (allies.length === 4) setMode('enemy');
+      }
+    } else if (mode === 'enemy') {
+      if (enemies.length < 5) enemies.push(h);
+    }
+  }
+
+  updateUI();
+}
+
+function updateUI() {
+  renderGrid();
+  updateSteps();
+  updateChips();
+  updateHint();
+  updateButton();
+}
+
+function updateSteps() {
+  const s1 = document.getElementById('step-me');
+  const s2 = document.getElementById('step-allies');
+  const s3 = document.getElementById('step-enemies');
+
+  s1.className = 'step ' + (myHero ? 'done' : (mode==='me' ? 'active' : 'todo'));
+  s2.className = 'step ' + (allies.length===4 ? 'done' : (mode==='ally'&&myHero ? 'active' : 'todo'));
+  s2.textContent = `2. Allies (${allies.length}/4)`;
+  s3.className = 'step ' + (enemies.length===5 ? 'done' : (mode==='enemy' ? 'active' : 'todo'));
+  s3.textContent = `3. Enemies (${enemies.length}/5)`;
+}
+
+function updateHint() {
+  const h = document.getElementById('hint');
+  if (!myHero) { h.innerHTML = 'Pick <span>your carry hero</span> first'; return; }
+  if (mode === 'ally' && allies.length < 4) { h.innerHTML = `Add <span>${4-allies.length} more allies</span>`; return; }
+  if (mode === 'enemy') { h.innerHTML = `Add <span>${5-enemies.length} more enemies</span>`; return; }
+  if (allies.length === 4 && enemies.length === 5) { h.innerHTML = '<span>All picked! Tap Analyze.</span>'; return; }
+  h.innerHTML = 'Switch mode to add allies or enemies';
+}
+
+function updateChips() {
+  document.getElementById('chip-me').className = myHero ? 'sel-chip me' : 'sel-chip empty';
+  document.getElementById('chip-me').textContent = myHero ? myHero.n : 'not picked';
+
+  const ac = document.getElementById('chips-allies');
+  ac.innerHTML = allies.length
+    ? allies.map(h=>`<span class="sel-chip ally">${h.n}</span>`).join('')
+    : '<span class="sel-chip empty">none</span>';
+
+  const ec = document.getElementById('chips-enemies');
+  ec.innerHTML = enemies.length
+    ? enemies.map(h=>`<span class="sel-chip enemy">${h.n}</span>`).join('')
+    : '<span class="sel-chip empty">none</span>';
+}
+
+function updateButton() {
+  const btn = document.getElementById('confirm-btn');
+  if (!myHero) { btn.disabled=true; btn.textContent='Select your hero first'; return; }
+  if (allies.length < 4) { btn.disabled=true; btn.textContent=`Pick ${4-allies.length} more allies`; return; }
+  if (enemies.length < 5) { btn.disabled=true; btn.textContent=`Pick ${5-enemies.length} more enemies`; return; }
+  btn.disabled = false;
+  btn.textContent = '⚔️  Analyze draft';
+}
+
+function renderGrid() {
+  const q = document.getElementById('search').value.toLowerCase().trim();
+  const grid = document.getElementById('grid');
+  const filtered = HEROES.filter(h =>
+    (currentAttr === 'ALL' || h.a === currentAttr) &&
+    (!q || h.n.toLowerCase().includes(q) || h.k.includes(q))
+  );
+
+  if (!filtered.length) {
+    grid.innerHTML = '<div class="empty-state">No heroes found</div>';
+    return;
+  }
+
+  grid.innerHTML = filtered.map(h => {
+    const sel = isSelected(h);
+    const cls = sel ? `hero-card selected-${sel}` : 'hero-card';
+    const badge = sel === 'me' ? '<div class="badge me">★</div>'
+                : sel === 'ally' ? '<div class="badge ally">A</div>'
+                : sel === 'enemy' ? '<div class="badge enemy">E</div>' : '';
+    return `<div class="${cls}" onclick='toggleHero(${JSON.stringify(h)})'>
+      <img src="${CDN(h.k)}" alt="${h.n}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>
+      <div class="fallback" style="display:none">${h.n}</div>
+      <div class="hero-name">${h.n}</div>
+      ${badge}
+    </div>`;
+  }).join('');
+}
+
+function confirm() {
+  if (!myHero || allies.length < 4 || enemies.length < 5) return;
+  const payload = JSON.stringify({
+    my_hero: myHero.n,
+    allies: allies.map(h => h.n),
+    enemies: enemies.map(h => h.n)
+  });
+  if (window.Telegram && window.Telegram.WebApp) {
+    Telegram.WebApp.sendData(payload);
+  } else {
+    alert('Draft: ' + payload);
+  }
+}
+
+if (window.Telegram && window.Telegram.WebApp) {
+  Telegram.WebApp.ready();
+  Telegram.WebApp.expand();
+}
+
+renderGrid();
+updateUI();
+</script>
+</body>
+</html>
