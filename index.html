@@ -292,14 +292,10 @@ function renderGrid() {
   grid.innerHTML = filtered.map(h => {
     const sel = isSelected(h);
     const cls = sel ? `hero-card selected-${sel}` : 'hero-card';
-    const badge = sel === 'me' ? '<div class="badge me">★</div>'
-                : sel === 'ally' ? '<div class="badge ally">A</div>'
-                : sel === 'enemy' ? '<div class="badge enemy">E</div>' : '';
-    return `<div class="${cls}" onclick="toggleHero('${h.k}')">
+    return `<div class="${cls}" data-key="${h.k}" onclick="toggleHero('${h.k}')">
       <img src="${CDN(h.k)}" alt="${h.n}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>
       <div class="fallback" style="display:none">${h.n}</div>
       <div class="hero-name">${h.n}</div>
-      ${badge}
     </div>`;
   }).join('');
 }
