@@ -2,6 +2,7 @@ import os
 import re
 import json
 from google import genai
+from telegram.constants import ParseMode
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
@@ -70,10 +71,12 @@ async def analyze_draft(update: Update, my_hero: str, allies: list, enemies: lis
                 system_instruction=SYSTEM_PROMPT,
             )
         )
-        advice = response.text
+        
+        # Convert standard Markdown (**) to Telegram Markdown (*) for bold text
+        advice = response.text.replace('**', '*')
 
         await thinking_msg.delete()
-        await update.message.reply_text(advice)
+        await update.message.reply_text(advice, parse_mode=ParseMode.MARKDOWN)
     except Exception as e:
         await thinking_msg.delete()
         await update.message.reply_text(f"Something went wrong: {e}\n\nPlease try again.")
