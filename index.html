@@ -178,7 +178,9 @@ function isSelected(h) {
   return null;
 }
 
-function toggleHero(h) {
+function toggleHero(heroKey) {
+  const h = HEROES.find(x => x.k === heroKey);
+  if (!h) return;
   const sel = isSelected(h);
 
   if (sel === 'me') { myHero = null; mode = 'me'; }
@@ -275,7 +277,7 @@ function renderGrid() {
     const badge = sel === 'me' ? '<div class="badge me">★</div>'
                 : sel === 'ally' ? '<div class="badge ally">A</div>'
                 : sel === 'enemy' ? '<div class="badge enemy">E</div>' : '';
-    return `<div class="${cls}" onclick='toggleHero(${JSON.stringify(h)})'>
+    return `<div class="${cls}" onclick="toggleHero('${h.k}')">
       <img src="${CDN(h.k)}" alt="${h.n}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>
       <div class="fallback" style="display:none">${h.n}</div>
       <div class="hero-name">${h.n}</div>
