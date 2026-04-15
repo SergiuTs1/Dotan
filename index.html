@@ -206,11 +206,29 @@ function toggleHero(heroKey) {
 }
 
 function updateUI() {
-  renderGrid();
+  updateGridVisuals();
   updateSteps();
   updateChips();
   updateHint();
   updateButton();
+}
+
+function updateGridVisuals() {
+  document.querySelectorAll('.hero-card').forEach(card => {
+    const k = card.getAttribute('data-key');
+    const h = HEROES.find(x => x.k === k);
+    if (!h) return;
+    
+    const sel = isSelected(h);
+    card.className = sel ? `hero-card selected-${sel}` : 'hero-card';
+    
+    const existingBadge = card.querySelector('.badge');
+    if (existingBadge) existingBadge.remove();
+    
+    if (sel === 'me') card.insertAdjacentHTML('beforeend', '<div class="badge me">★</div>');
+    else if (sel === 'ally') card.insertAdjacentHTML('beforeend', '<div class="badge ally">A</div>');
+    else if (sel === 'enemy') card.insertAdjacentHTML('beforeend', '<div class="badge enemy">E</div>');
+  });
 }
 
 function updateSteps() {
