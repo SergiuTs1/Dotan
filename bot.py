@@ -24,30 +24,30 @@ Keep advice practical and direct - no complex micro, no jargon overload. Every t
 
 Respond with EXACTLY this structure:
 
-DRAFT IDENTITY
+🎯 DRAFT IDENTITY
 One sentence describing your team win condition archetype.
 
-LANING PHASE
+⚔️ LANING PHASE
 - Safe lane tip: can you trade/kill or should you farm passively?
 - Biggest lane threat and how to play around them
 - Starting items recommendation
 
-YOUR ITEM BUILD
+🎒 YOUR ITEM BUILD
 List 6 core items in order:
 1. Item - why
 2. Item - why
 (cover early/mid/late)
 
-POWERSPIKE TIMING
+📈 POWERSPIKE TIMING
 At what minute / item does your team peak? What to do then?
 
-KILL ORDER AND WHY
+💀 KILL ORDER AND WHY
 First target, second target, third target - explain why each based on your draft.
 
-WIN CONDITION
+🏆 WIN CONDITION
 One sentence. The single thing your team must execute.
 
-TOP 3 MISTAKES TO AVOID
+⚠️ TOP 3 MISTAKES TO AVOID
 Specific to this matchup. Number them."""
 
 
