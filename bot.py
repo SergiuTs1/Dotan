@@ -89,11 +89,12 @@ async def analyze_draft(update: Update, my_hero: str, allies: list, enemies: lis
         # Convert standard Markdown (**) to Telegram Markdown (*) for bold text
         advice = response.text.replace('**', '*')
 
-        await thinking_msg.delete()
-        await update.message.reply_text(advice, parse_mode=ParseMode.MARKDOWN)
+        await thinking_msg.edit_text(advice, parse_mode=ParseMode.MARKDOWN)
     except Exception as e:
-        await thinking_msg.delete()
-        await update.message.reply_text(f"Something went wrong: {e}\n\nPlease try again.")
+        try:
+            await thinking_msg.edit_text(f"Something went wrong: {e}\n\nPlease try again.")
+        except Exception:
+            pass
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
