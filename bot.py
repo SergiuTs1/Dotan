@@ -69,16 +69,28 @@ One sentence. The single thing your team must execute.
 Specific to this matchup. Number them."""
 
 
-def escape_markdown_v2(text: str) -> str:
-    """Escapes special characters for Telegram's MarkdownV2 format, except for characters used for actual formatting (like * or _)"""
-    # These are all the characters that need to be escaped in MarkdownV2
-    escape_chars = r'_~`>#+-=|{}.!'
-    # Escape them
-    for char in escape_chars:
-        text = text.replace(char, f'\\{char}')
-    # Also escape brackets/parentheses carefully (since they might be used in links, though unlikely here)
-    text = text.replace('[', r'\[').replace(']', r'\]').replace('(', r'\(').replace(')', r'\)')
+def convert_gemini_markdown_to_html(text: str) -> str:
+    """
+    Converts a subset of Gemini's Markdown to Telegram's supported HTML format.
+    - **bold** -> <b>bold</b>
+    - Headers (#, ##, etc.) -> <b>Header</b>
+    - Escapes essential HTML characters.
+    """
+    # Escape base HTML characters to prevent injection or formatting errors
+    text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    # Convert Markdown Headers (e.g., #, ##) to bold
+    text = re.sub(r"^\s*#+\s*(.+)$", r"<b>\1</b>", text, flags=re.MULTILINE)
+
+    # Convert **bold** to <b>bold</b>
+    # This is the most common format from Gemini.
+    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+
+    # Gemini sometimes uses * for lists. Telegram HTML doesn't have <ul>/<li>.
+    # We can leave them as is, they look fine as plain text bullet points.
+
     return text
+
 
 async def analyze_draft(update: Update, my_hero: str, allies: list, enemies: list):
     ally_str = ", ".join(allies) if allies else "unknown"
@@ -120,20 +132,18 @@ async def analyze_draft(update: Update, my_hero: str, allies: list, enemies: lis
         
         advice = response.text
         
-        # Telegram Markdown V1 is deprecated and very strict. 
-        # Using MARKDOWN can cause issues if Gemini returns symbols like `-`, `.`, etc in unexpected ways.
-        # However, MarkdownV2 is very strict too, requiring escaping. 
-        # Alternatively, we can use ParseMode.HTML or try to escape it properly, 
-        # or simply don't pass parse_mode (plain text) if it fails.
-        
         try:
-            # We try using Markdown
-            # In V1, asterisks are used for bold.
-            advice_md = advice.replace('**', '*')
-            await thinking_msg.edit_text(advice_md, parse_mode=ParseMode.MARKDOWN)
-        except Exception as md_err:
-            print(f"Markdown parsing failed: {md_err}, sending as plain text.")
-            # If markdown parsing fails, fallback to sending the exact text without parse_mode
+            # Convert Markdown to a safe subset of HTML for Telegram
+            html_advice = convert_gemini_markdown_to_html(advice)
+            
+            # Send the message with HTML parsing
+            await thinking_msg.edit_text(
+                html_advice,
+                parse_mode=ParseMode.HTML
+            )
+        except Exception as formatting_err:
+            # If HTML formatting fails for any reason, fall back to plain text
+            print(f"HTML formatting failed: {formatting_err}, sending as plain text.")
             await thinking_msg.edit_text(advice)
 
     except APIError as api_err:
