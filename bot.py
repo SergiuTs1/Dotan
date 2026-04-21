@@ -108,7 +108,7 @@ async def analyze_draft(update: Update, my_hero: str, allies: list, enemies: lis
 
     try:
         response = client.models.generate_content(
-            model='gemini-3-flash-preview',
+            model='gemini-3.1-flash-lite-preview',
             contents=user_message,
             config=genai.types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,
