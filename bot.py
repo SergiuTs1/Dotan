@@ -7,6 +7,9 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKe
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
 
+# Import our custom Dota API integration
+from dota_api import dota_api
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -79,15 +82,30 @@ def escape_markdown_v2(text: str) -> str:
 async def analyze_draft(update: Update, my_hero: str, allies: list, enemies: list):
     ally_str = ", ".join(allies) if allies else "unknown"
     enemy_str = ", ".join(enemies)
+    
+    thinking_msg = await update.message.reply_text(
+        f"Analyzing draft... playing {my_hero} vs {len(enemies)} enemies.\nFetching live meta..."
+    )
+    
+    # Fetch live meta items
+    meta_items_str = await dota_api.get_meta_items(my_hero)
+    
+    # Construct user message
     user_message = (
         f"My hero (pos 1 carry): {my_hero}\n"
         f"My team: {ally_str}\n"
         f"Enemy team: {enemy_str}\n\n"
-        f"Give me the full game plan."
     )
-    thinking_msg = await update.message.reply_text(
-        f"Analyzing draft... playing {my_hero} vs {len(enemies)} enemies."
-    )
+    
+    if meta_items_str:
+        user_message += (
+            f"[LIVE META DATA]\n"
+            f"Current popular items for {my_hero} this patch: {meta_items_str}\n\n"
+            f"Give me the full game plan. Prioritize the live meta items in your build if they make sense against this specific enemy draft."
+        )
+    else:
+        user_message += "Give me the full game plan."
+
     try:
         response = client.models.generate_content(
             model='gemini-3-flash-preview',
