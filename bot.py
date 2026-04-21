@@ -6,6 +6,7 @@ from telegram.constants import ParseMode
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
+from google.genai.errors import APIError
 
 # Import our custom Dota API integration
 from dota_api import dota_api
@@ -135,6 +136,22 @@ async def analyze_draft(update: Update, my_hero: str, allies: list, enemies: lis
             # If markdown parsing fails, fallback to sending the exact text without parse_mode
             await thinking_msg.edit_text(advice)
 
+    except APIError as api_err:
+        # Check if this is specifically a 429 Too Many Requests/Quota error
+        if api_err.code == 429:
+             try:
+                 await thinking_msg.edit_text(
+                     "⏳ I'm currently analyzing too many drafts! I've hit a temporary rate limit from Google.\n\n"
+                     "Please wait about 1 minute and try your request again."
+                 )
+             except Exception:
+                 pass
+        else:
+             # Handle other specific API errors gracefully
+             try:
+                 await thinking_msg.edit_text(f"API Error: {api_err.message}\n\nPlease try again later.")
+             except Exception:
+                 pass
     except Exception as e:
         try:
             await thinking_msg.edit_text(f"Something went wrong: {e}\n\nPlease try again.")
