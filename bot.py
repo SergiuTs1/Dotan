@@ -112,6 +112,8 @@ async def analyze_draft(update: Update, my_hero: str, allies: list, enemies: lis
             contents=user_message,
             config=genai.types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,
+                # Enable Google Search to retrieve latest item abilities
+                tools=[{'google_search': {}}],
             )
         )
         
