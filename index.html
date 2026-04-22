@@ -8,7 +8,17 @@
 <style>
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   body{background:var(--tg-theme-bg-color,#1a1a2e);color:var(--tg-theme-text-color,#e0e0e0);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;display:flex;flex-direction:column}
-  .header{padding:12px 14px 8px;background:var(--tg-theme-secondary-bg-color,#1e2433);border-bottom:1px solid rgba(255,255,255,0.08);flex-shrink:0}
+  #bg-splash{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:0;background-size:cover;background-position:center;filter:blur(30px) brightness(0.25);transition:background-image 0.5s ease,opacity 0.5s ease;opacity:0;pointer-events:none}
+  #bg-splash.active{opacity:1}
+  .header{position:relative;z-index:1;padding:12px 14px 8px;background:rgba(30,36,51,0.7);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid rgba(255,255,255,0.08);flex-shrink:0}
+  .draft-board{display:flex;justify-content:space-between;margin-bottom:12px}
+  .draft-team{display:flex;gap:4px}
+  .draft-slot{width:28px;height:28px;border-radius:4px;background:rgba(255,255,255,0.05);border:1px dashed rgba(255,255,255,0.2);overflow:hidden;position:relative}
+  .draft-slot img{width:100%;height:100%;object-fit:cover;display:block}
+  .draft-slot.me{border-color:#EF9F27}
+  .draft-slot.ally{border-color:#1D9E75}
+  .draft-slot.enemy{border-color:#E24B4A}
+  .flying-clone{position:fixed;z-index:9999;border-radius:8px;pointer-events:none;transform-origin:top left;object-fit:cover}
   .step-row{display:flex;gap:6px;margin-bottom:8px}
   .step{flex:1;text-align:center;font-size:11px;padding:5px 4px;border-radius:8px;font-weight:600;transition:all .2s}
   .step.done{background:#0F6E56;color:#9FE1CB}
@@ -24,10 +34,12 @@
   .search-bar{display:flex;align-items:center;background:rgba(255,255,255,0.07);border-radius:10px;padding:0 10px;gap:8px}
   .search-bar input{background:none;border:none;outline:none;flex:1;color:var(--tg-theme-text-color,#e0e0e0);font-size:13px;padding:8px 0}
   .search-bar input::placeholder{color:rgba(255,255,255,0.3)}
+  .attr-tabs,.hero-grid,.empty-state{position:relative;z-index:1}
   .attr-tabs{display:flex;background:rgba(255,255,255,0.05);border-radius:8px;margin:10px 14px 0;overflow:hidden;flex-shrink:0}
   .attr-tab{flex:1;text-align:center;padding:7px 4px;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;color:rgba(255,255,255,0.4)}
   .attr-tab.active{background:#534AB7;color:#fff;border-radius:7px}
-  .hero-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;padding:10px 14px;flex-grow:1;overflow-y:auto;padding-bottom: 20px;align-content:start;}
+  ::view-transition-old(hero-grid),::view-transition-new(hero-grid){animation-duration:0.25s;animation-timing-function:cubic-bezier(0.4,0,0.2,1)}
+  .hero-grid{view-transition-name:hero-grid;display:grid;grid-template-columns:repeat(5,1fr);gap:6px;padding:10px 14px;flex-grow:1;overflow-y:auto;padding-bottom:20px;align-content:start}
   .hero-card{border-radius:8px;overflow:hidden;border:2px solid transparent;cursor:pointer;transition:all .15s;position:relative;background:#111827}
   .hero-card:active{transform:scale(0.92)}
   .hero-card.selected-me{border-color:#EF9F27;box-shadow:0 0 0 1px #EF9F27}
@@ -40,20 +52,29 @@
   .badge.me{background:#EF9F27;color:#000}
   .badge.ally{background:#1D9E75;color:#fff}
   .badge.enemy{background:#E24B4A;color:#fff}
-  .selected-bar{padding:8px 14px;background:var(--tg-theme-secondary-bg-color,#1e2433);border-top:1px solid rgba(255,255,255,0.08);flex-shrink:0}
-  .sel-row{display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap}
-  .sel-label{font-size:10px;color:rgba(255,255,255,0.4);white-space:nowrap}
-  .sel-chip{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:500;white-space:nowrap}
-  .sel-chip.me{background:#412402;color:#FAC775}
-  .sel-chip.ally{background:#085041;color:#9FE1CB}
-  .sel-chip.enemy{background:#791F1F;color:#F7C1C1}
-  .sel-chip.empty{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.25)}
   .empty-state{grid-column:1/-1;text-align:center;padding:30px 0;color:rgba(255,255,255,0.25);font-size:13px}
 </style>
 </head>
 <body>
 
+<div id="bg-splash"></div>
 <div class="header">
+  <div class="draft-board">
+    <div class="draft-team">
+      <div class="draft-slot me" id="slot-me"></div>
+      <div class="draft-slot ally" id="slot-ally-0"></div>
+      <div class="draft-slot ally" id="slot-ally-1"></div>
+      <div class="draft-slot ally" id="slot-ally-2"></div>
+      <div class="draft-slot ally" id="slot-ally-3"></div>
+    </div>
+    <div class="draft-team">
+      <div class="draft-slot enemy" id="slot-enemy-0"></div>
+      <div class="draft-slot enemy" id="slot-enemy-1"></div>
+      <div class="draft-slot enemy" id="slot-enemy-2"></div>
+      <div class="draft-slot enemy" id="slot-enemy-3"></div>
+      <div class="draft-slot enemy" id="slot-enemy-4"></div>
+    </div>
+  </div>
   <div class="step-row">
     <div class="step" id="step-me">1. My hero</div>
     <div class="step" id="step-allies">2. Allies (0/4)</div>
@@ -79,12 +100,6 @@
 </div>
 
 <div class="hero-grid" id="grid"></div>
-
-<div class="selected-bar">
-  <div class="sel-row"><span class="sel-label">Me:</span><span id="chip-me" class="sel-chip empty">not picked</span></div>
-  <div class="sel-row"><span class="sel-label">Allies:</span><span id="chips-allies"></span></div>
-  <div class="sel-row"><span class="sel-label">Enemies:</span><span id="chips-enemies"></span></div>
-</div>
 
 <script>
 const HEROES = [
@@ -162,12 +177,23 @@ tg.MainButton.onClick(() => {
     confirm();
 });
 
-function setAttr(a) {
-  currentAttr = a;
+function updateAttrTabs() {
   document.querySelectorAll('.attr-tab').forEach((t,i) => {
-    t.classList.toggle('active', ['ALL','STR','AGI','INT','UNI'][i] === a);
+    t.classList.toggle('active', ['ALL','STR','AGI','INT','UNI'][i] === currentAttr);
   });
-  renderGrid();
+}
+
+function setAttr(a) {
+  if (currentAttr === a) return;
+  if (tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
+  
+  if (document.startViewTransition) {
+      document.startViewTransition(() => {
+          currentAttr = a; updateAttrTabs(); renderGridInner();
+      });
+  } else {
+      currentAttr = a; updateAttrTabs(); renderGridInner();
+  }
 }
 
 function setMode(m) {
@@ -186,37 +212,95 @@ function isSelected(h) {
   return null;
 }
 
-function toggleHero(heroKey) {
+function flyToSlot(cardEl, slotId, hero) {
+    const slotEl = document.getElementById(slotId);
+    if (!slotEl || !cardEl) return;
+    
+    const slotImg = slotEl.querySelector('img');
+    if (slotImg) slotImg.style.opacity = '0'; // Hide real image temporarily
+    
+    const cardRect = cardEl.getBoundingClientRect();
+    const slotRect = slotEl.getBoundingClientRect();
+    
+    const clone = document.createElement('img');
+    clone.src = CDN(hero.k);
+    clone.className = 'flying-clone';
+    clone.style.left = cardRect.left + 'px';
+    clone.style.top = cardRect.top + 'px';
+    clone.style.width = cardRect.width + 'px';
+    clone.style.height = cardRect.height + 'px';
+    document.body.appendChild(clone);
+    
+    const anim = clone.animate([
+        { transform: 'translate(0, 0) scale(1)', opacity: 1, borderRadius: '8px' },
+        { transform: `translate(${slotRect.left - cardRect.left}px, ${slotRect.top - cardRect.top}px) scale(${slotRect.width / cardRect.width})`, opacity: 0.8, borderRadius: '4px' }
+    ], {
+        duration: 350,
+        easing: 'cubic-bezier(0.25, 1, 0.5, 1)'
+    });
+    
+    anim.onfinish = () => {
+        clone.remove();
+        if (slotImg) {
+            slotImg.style.transition = 'opacity 0.2s';
+            slotImg.style.opacity = '1';
+        }
+    };
+}
+
+function toggleHero(heroKey, cardEl) {
   const h = HEROES.find(x => x.k === heroKey);
   if (!h) return;
   const sel = isSelected(h);
 
-  if (sel === 'me') { myHero = null; mode = 'me'; }
-  else if (sel === 'ally') { allies = allies.filter(a => a.k !== h.k); }
-  else if (sel === 'enemy') { enemies = enemies.filter(e => e.k !== h.k); }
+  let action = null;
+  let targetSlot = null;
+
+  if (sel === 'me') { myHero = null; mode = 'me'; action = 'remove'; }
+  else if (sel === 'ally') { allies = allies.filter(a => a.k !== h.k); action = 'remove'; }
+  else if (sel === 'enemy') { enemies = enemies.filter(e => e.k !== h.k); action = 'remove'; }
   else {
+    action = 'add';
     if (mode === 'me') {
       if (myHero) allies = allies.filter(a => a.k !== myHero.k);
       myHero = h;
       mode = 'ally';
       document.getElementById('mode-row').style.display = 'flex';
+      targetSlot = 'slot-me';
+      if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('heavy');
     } else if (mode === 'ally') {
       if (allies.length < 4) {
         allies.push(h);
+        targetSlot = `slot-ally-${allies.length - 1}`;
         if (allies.length === 4) setMode('enemy');
-      }
+        if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+      } else { action = null; }
     } else if (mode === 'enemy') {
-      if (enemies.length < 5) enemies.push(h);
+      if (enemies.length < 5) {
+        enemies.push(h);
+        targetSlot = `slot-enemy-${enemies.length - 1}`;
+        if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+        if (enemies.length === 5 && allies.length === 4) {
+           if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+        }
+      } else { action = null; }
     }
   }
 
-  updateUI();
+  if (action === 'add' && targetSlot && cardEl) {
+      updateUI();
+      flyToSlot(cardEl, targetSlot, h);
+  } else if (action !== null) {
+      updateUI();
+      if (action === 'remove' && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+  }
 }
 
 function updateUI() {
   updateGridVisuals();
   updateSteps();
-  updateChips();
+  updateSlots();
+  updateBackground();
   updateHint();
   updateButton();
 }
@@ -260,19 +344,24 @@ function updateHint() {
   h.innerHTML = 'Switch mode to add allies or enemies';
 }
 
-function updateChips() {
-  document.getElementById('chip-me').className = myHero ? 'sel-chip me' : 'sel-chip empty';
-  document.getElementById('chip-me').textContent = myHero ? myHero.n : 'not picked';
+function updateSlots() {
+  document.getElementById('slot-me').innerHTML = myHero ? `<img src="${CDN(myHero.k)}" />` : '';
+  for (let i=0; i<4; i++) {
+      document.getElementById(`slot-ally-${i}`).innerHTML = allies[i] ? `<img src="${CDN(allies[i].k)}" />` : '';
+  }
+  for (let i=0; i<5; i++) {
+      document.getElementById(`slot-enemy-${i}`).innerHTML = enemies[i] ? `<img src="${CDN(enemies[i].k)}" />` : '';
+  }
+}
 
-  const ac = document.getElementById('chips-allies');
-  ac.innerHTML = allies.length
-    ? allies.map(h=>`<span class="sel-chip ally">${h.n}</span>`).join('')
-    : '<span class="sel-chip empty">none</span>';
-
-  const ec = document.getElementById('chips-enemies');
-  ec.innerHTML = enemies.length
-    ? enemies.map(h=>`<span class="sel-chip enemy">${h.n}</span>`).join('')
-    : '<span class="sel-chip empty">none</span>';
+function updateBackground() {
+  const bg = document.getElementById('bg-splash');
+  if (myHero) {
+      bg.style.backgroundImage = `url(${CDN(myHero.k)})`;
+      bg.classList.add('active');
+  } else {
+      bg.classList.remove('active');
+  }
 }
 
 function updateButton() {
@@ -301,7 +390,9 @@ function updateButton() {
   tg.MainButton.setText('⚔️ ANALYZE DRAFT');
 }
 
-function renderGrid() {
+function renderGrid() { renderGridInner(); }
+
+function renderGridInner() {
   const q = document.getElementById('search').value.toLowerCase().trim();
   const grid = document.getElementById('grid');
   const filtered = HEROES.filter(h =>
@@ -317,7 +408,7 @@ function renderGrid() {
   grid.innerHTML = filtered.map(h => {
     const sel = isSelected(h);
     const cls = sel ? `hero-card selected-${sel}` : 'hero-card';
-    return `<div class="${cls}" data-key="${h.k}" onclick="toggleHero('${h.k}')">
+    return `<div class="${cls}" data-key="${h.k}" onclick="toggleHero('${h.k}', this)">
       <img src="${CDN(h.k)}" alt="${h.n}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>
       <div class="fallback" style="display:none">${h.n}</div>
       <div class="hero-name">${h.n}</div>
