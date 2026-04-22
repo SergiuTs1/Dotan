@@ -86,8 +86,12 @@ def convert_gemini_markdown_to_html(text: str) -> str:
     # This is the most common format from Gemini.
     text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
 
-    # Gemini sometimes uses * for lists. Telegram HTML doesn't have <ul>/<li>.
-    # We can leave them as is, they look fine as plain text bullet points.
+    # Convert *italics* to <i>italics</i>
+    # Negative lookbehinds/lookaheads prevent matching list items or stray spaces
+    text = re.sub(r"(?<!\*)\*(?!\s)(.+?)(?<!\s)\*(?!\*)", r"<i>\1</i>", text)
+
+    # Convert markdown list asterisks (* or -) to standard bullet points
+    text = re.sub(r"^\s*[\*\-]\s+", "• ", text, flags=re.MULTILINE)
 
     return text
 
