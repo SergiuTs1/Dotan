@@ -34,7 +34,18 @@ class DotaAPI:
                         self.item_map = {}
                         for key, value in items.items():
                             if "id" in value and "dname" in value:
-                                self.item_map[str(value["id"])] = value["dname"]
+                                # Safely extract the item description/hint
+                                hint = value.get("hint")
+                                desc = ""
+                                if isinstance(hint, list):
+                                    desc = " ".join(str(h) for h in hint)
+                                elif isinstance(hint, str):
+                                    desc = hint
+                                
+                                self.item_map[str(value["id"])] = {
+                                    "dname": value["dname"],
+                                    "desc": desc
+                                }
                     else:
                         logger.error(f"Failed to fetch items: {resp.status}")
                 
@@ -76,6 +87,7 @@ class DotaAPI:
                     
                     data = await resp.json()
                     popular_items = []
+                    seen_items = set()
                     
                     # Extract top items for mid and late game
                     for phase in ['mid_game_items', 'late_game_items']:
@@ -85,12 +97,17 @@ class DotaAPI:
                         
                         # Take top 3 from each phase
                         for item_id, count in sorted_items[:3]:
-                            item_name = self.item_map.get(str(item_id), f"Item {item_id}")
-                            if item_name not in popular_items:
-                                popular_items.append(item_name)
+                            item_info = self.item_map.get(str(item_id))
+                            if item_info:
+                                dname = item_info["dname"]
+                                desc = item_info["desc"]
+                                if dname not in seen_items:
+                                    seen_items.add(dname)
+                                    formatted_item = f"{dname} ({desc})" if desc else dname
+                                    popular_items.append(formatted_item)
                     
                     if popular_items:
-                        return ", ".join(popular_items)
+                        return " | ".join(popular_items)
                     return ""
             except Exception as e:
                 logger.error(f"Error fetching meta items: {e}")
