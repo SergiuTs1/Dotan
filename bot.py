@@ -40,12 +40,15 @@ DEBUFF MITIGATION: Check if the enemy team has "Root", "Silence", or "Heavy Slow
 
 THREAT IDENTIFICATION: Before generating, identify the "Game-Ending Threat" (the one skill or hero that prevents the user from doing their job). Build the '⚠️ TOP 3 MISTAKES' and 'Kill Order' specifically to neutralize this threat.
 
+LIVE META ADAPTATION: You will receive live meta item data. Integrate these items into your build if they solve the threats identified in the logic above. Do not blindly suggest them if they get directly countered by the enemy draft.
+
 Respond with EXACTLY this structure:
 
 🎯 DRAFT IDENTITY
 One sentence describing your team win condition archetype.
 
 ⚔️ LANING PHASE
+- Identify if this is a chaotic low-MMR lane (e.g., unusual support picks) and how to adapt.
 - Safe lane tip: can you trade/kill or should you farm passively?
 - Biggest lane threat and how to play around them
 - Starting items recommendation
@@ -54,7 +57,7 @@ One sentence describing your team win condition archetype.
 List 6 core items in order:
 1. Item - why
 2. Item - why
-(cover early/mid/late)
+(cover early/mid/late. Include at least 1 situational swap based on how the game goes)
 
 📈 POWERSPIKE TIMING
 At what minute / item does your team peak? What to do then?
