@@ -158,12 +158,12 @@ class DotaAPI:
                         return ""
 
                     data = await resp.json()
-                    vs_list = (
+                    matchup_list = (
                         data.get("data", {})
                         .get("heroStats", {})
-                        .get("matchUp", {})
-                        .get("vs", [])
+                        .get("matchUp", [])
                     )
+                    vs_list = matchup_list[0].get("vs", []) if matchup_list else []
 
                     results = []
                     for entry in vs_list:
