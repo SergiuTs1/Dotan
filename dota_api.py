@@ -53,27 +53,22 @@ class DotaAPI:
             except Exception as e:
                 logger.error(f"Error initializing OpenDota API: {e}")
 
+    def _resolve_hero_id(self, hero_name: str) -> int | None:
+        search_name = hero_name.lower().strip().replace("-", "").replace(" ", "")
+        for name, h_id in self.hero_map.items():
+            if search_name == name.replace("-", "").replace(" ", ""):
+                return h_id
+        for name, h_id in self.hero_map.items():
+            normalized = name.replace("-", "").replace(" ", "")
+            if search_name in normalized or normalized in search_name:
+                return h_id
+        return None
+
     async def get_meta_items(self, hero_name: str) -> str:
         if not self._initialized:
             await self.initialize()
 
-        # Handle formatting differences (e.g., Anti-Mage vs Anti Mage)
-        hero_id = None
-        search_name = hero_name.lower().strip().replace("-", "")
-        
-        for name, h_id in self.hero_map.items():
-            formatted_name = name.replace("-", "")
-            if search_name == formatted_name:
-                hero_id = h_id
-                break
-        
-        # Fallback to substring matching if exact match fails
-        if not hero_id:
-            for name, h_id in self.hero_map.items():
-                if search_name in name.replace("-", "") or name.replace("-", "") in search_name:
-                    hero_id = h_id
-                    break
-
+        hero_id = self._resolve_hero_id(hero_name)
         if not hero_id:
             logger.warning(f"Could not find hero ID for {hero_name}")
             return ""
@@ -84,33 +79,72 @@ class DotaAPI:
                     if resp.status != 200:
                         logger.error(f"Failed to fetch item popularity for hero {hero_id}")
                         return ""
-                    
+
                     data = await resp.json()
                     popular_items = []
                     seen_items = set()
-                    
-                    # Extract top items for mid and late game
-                    for phase in ['mid_game_items', 'late_game_items']:
+
+                    for phase, label in [
+                        ('start_game_items', 'Early'),
+                        ('mid_game_items', 'Mid'),
+                        ('late_game_items', 'Late'),
+                    ]:
                         phase_items = data.get(phase, {})
-                        # Sort items by popularity count (descending)
                         sorted_items = sorted(phase_items.items(), key=lambda x: x[1], reverse=True)
-                        
-                        # Take top 3 from each phase
-                        for item_id, count in sorted_items[:3]:
+                        for item_id, _ in sorted_items[:3]:
                             item_info = self.item_map.get(str(item_id))
                             if item_info:
                                 dname = item_info["dname"]
-                                desc = item_info["desc"]
                                 if dname not in seen_items:
                                     seen_items.add(dname)
-                                    formatted_item = f"{dname} ({desc})" if desc else dname
-                                    popular_items.append(formatted_item)
-                    
-                    if popular_items:
-                        return " | ".join(popular_items)
-                    return ""
+                                    popular_items.append(f"[{label}] {dname}")
+
+                    return " | ".join(popular_items) if popular_items else ""
             except Exception as e:
                 logger.error(f"Error fetching meta items: {e}")
+                return ""
+
+    async def get_matchup_context(self, carry_name: str, enemy_names: list) -> str:
+        if not self._initialized:
+            await self.initialize()
+
+        carry_id = self._resolve_hero_id(carry_name)
+        if not carry_id:
+            logger.warning(f"Could not find hero ID for {carry_name}")
+            return ""
+
+        enemy_ids = {}
+        for name in enemy_names:
+            h_id = self._resolve_hero_id(name)
+            if h_id:
+                enemy_ids[h_id] = name
+
+        if not enemy_ids:
+            return ""
+
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.get(f"{self.base_url}/heroes/{carry_id}/matchups") as resp:
+                    if resp.status != 200:
+                        logger.error(f"Failed to fetch matchups for hero {carry_id}")
+                        return ""
+
+                    matchups = await resp.json()
+                    results = []
+                    for entry in matchups:
+                        if entry["hero_id"] in enemy_ids:
+                            games = entry["games_played"]
+                            if games == 0:
+                                continue
+                            wr = round(entry["wins"] / games * 100, 1)
+                            label = "favored" if wr >= 50 else "disadvantage"
+                            results.append(
+                                f"{carry_name} vs {enemy_ids[entry['hero_id']]}: {wr}% WR over {games} games ({label})"
+                            )
+
+                    return "\n".join(results) if results else ""
+            except Exception as e:
+                logger.error(f"Error fetching matchup data: {e}")
                 return ""
 
 # Create a singleton instance to be used across the bot

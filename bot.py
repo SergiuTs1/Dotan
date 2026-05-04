@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import asyncio
 from google import genai
 from telegram.constants import ParseMode
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
@@ -40,7 +41,9 @@ DEBUFF MITIGATION: Check if the enemy team has "Root", "Silence", or "Heavy Slow
 
 THREAT IDENTIFICATION: Before generating, identify the "Game-Ending Threat" (the one skill or hero that prevents the user from doing their job). Build the '⚠️ TOP 3 MISTAKES' and 'Kill Order' specifically to neutralize this threat.
 
-LIVE META ADAPTATION: You will receive live meta item data. Integrate these items into your build if they solve the threats identified in the logic above. Do not blindly suggest them if they get directly countered by the enemy draft.
+MATCHUP GROUND TRUTH: You will receive live win-rate data for the carry vs each enemy hero. This is real patch data — treat it as ground truth. If WR < 50%, treat as a disadvantaged matchup regardless of your training data. Use the win rates to rank kill priority (target the hero you beat most convincingly first) and to calibrate aggression (if overall WR across enemies is below 48%, play conservatively).
+
+LIVE META ADAPTATION: You will receive live meta item data including early, mid, and late game phases. Integrate these items into your build if they solve the threats identified in the logic above. Do not blindly suggest them if they get directly countered by the enemy draft.
 
 Respond with EXACTLY this structure:
 
@@ -106,25 +109,30 @@ async def analyze_draft(update: Update, my_hero: str, allies: list, enemies: lis
     thinking_msg = await update.message.reply_text(
         f"Analyzing draft... playing {my_hero} vs {len(enemies)} enemies.\nFetching live meta..."
     )
-    
-    # Fetch live meta items
-    meta_items_str = await dota_api.get_meta_items(my_hero)
-    
+
+    # Fetch meta items and matchup data in parallel
+    meta_items_str, matchup_str = await asyncio.gather(
+        dota_api.get_meta_items(my_hero),
+        dota_api.get_matchup_context(my_hero, enemies),
+    )
+
     # Construct user message
     user_message = (
         f"My hero (pos 1 carry): {my_hero}\n"
         f"My team: {ally_str}\n"
         f"Enemy team: {enemy_str}\n\n"
     )
-    
+
+    if matchup_str:
+        user_message += f"[MATCHUP WIN RATES — live data, use as ground truth]\n{matchup_str}\n\n"
+
     if meta_items_str:
         user_message += (
-            f"[LIVE META DATA]\n"
-            f"Current popular items for {my_hero} this patch: {meta_items_str}\n\n"
-            f"Give me the full game plan. Prioritize the live meta items in your build if they make sense against this specific enemy draft."
+            f"[LIVE META ITEMS for {my_hero}]\n"
+            f"{meta_items_str}\n\n"
         )
-    else:
-        user_message += "Give me the full game plan."
+
+    user_message += "Give me the full game plan. Use the matchup win rates and live meta items above to ground your advice."
 
     try:
         response = client.models.generate_content(
