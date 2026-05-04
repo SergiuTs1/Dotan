@@ -18,6 +18,7 @@ load_dotenv()
 # ── Config ───────────────────────────────────────────────────────────────────
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+STRATZ_API_KEY = os.environ.get("STRATZ_API_KEY")
 MINI_APP_URL = os.environ.get("MINI_APP_URL", "https://sergiuts1.github.io/Dotan/")
 
 client = genai.Client(api_key=GEMINI_API_KEY)

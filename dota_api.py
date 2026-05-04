@@ -1,3 +1,4 @@
+import os
 import aiohttp
 import asyncio
 import logging
@@ -108,6 +109,11 @@ class DotaAPI:
         if not self._initialized:
             await self.initialize()
 
+        stratz_key = os.environ.get("STRATZ_API_KEY", "")
+        if not stratz_key:
+            logger.warning("STRATZ_API_KEY not set, skipping matchup data")
+            return ""
+
         carry_id = self._resolve_hero_id(carry_name)
         if not carry_id:
             logger.warning(f"Could not find hero ID for {carry_name}")
@@ -122,29 +128,58 @@ class DotaAPI:
         if not enemy_ids:
             return ""
 
+        query = """
+        query HeroMatchup($heroId: Short!) {
+          heroStats {
+            matchUp(heroId: $heroId, bracketBasicIds: [HERALD_GUARDIAN, CRUSADER_ARCHON]) {
+              vs {
+                heroId2
+                winsAverage
+                matchCount
+              }
+            }
+          }
+        }
+        """
+
         async with aiohttp.ClientSession() as session:
             try:
-                async with session.get(f"{self.base_url}/heroes/{carry_id}/matchups") as resp:
+                async with session.post(
+                    "https://api.stratz.com/graphql",
+                    json={"query": query, "variables": {"heroId": carry_id}},
+                    headers={
+                        "Authorization": f"Bearer {stratz_key}",
+                        "Content-Type": "application/json",
+                        "User-Agent": "STRATZ_API",
+                    },
+                ) as resp:
                     if resp.status != 200:
-                        logger.error(f"Failed to fetch matchups for hero {carry_id}")
+                        logger.error(f"Stratz API returned {resp.status}")
                         return ""
 
-                    matchups = await resp.json()
+                    data = await resp.json()
+                    vs_list = (
+                        data.get("data", {})
+                        .get("heroStats", {})
+                        .get("matchUp", {})
+                        .get("vs", [])
+                    )
+
                     results = []
-                    for entry in matchups:
-                        if entry["hero_id"] in enemy_ids:
-                            games = entry["games_played"]
-                            if games == 0:
+                    for entry in vs_list:
+                        if entry["heroId2"] in enemy_ids:
+                            games = entry.get("matchCount", 0)
+                            if games < 100:
                                 continue
-                            wr = round(entry["wins"] / games * 100, 1)
+                            wr = round(entry["winsAverage"] * 100, 1)
                             label = "favored" if wr >= 50 else "disadvantage"
                             results.append(
-                                f"{carry_name} vs {enemy_ids[entry['hero_id']]}: {wr}% WR over {games} games ({label})"
+                                f"{carry_name} vs {enemy_ids[entry['heroId2']]}: {wr}% WR over {games:,} games ({label})"
                             )
 
                     return "\n".join(results) if results else ""
             except Exception as e:
-                logger.error(f"Error fetching matchup data: {e}")
+                logger.error(f"Error fetching Stratz matchup data: {e}")
                 return ""
 
 # Create a singleton instance to be used across the bot
