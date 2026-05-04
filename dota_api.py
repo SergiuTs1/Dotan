@@ -131,7 +131,7 @@ class DotaAPI:
         query = """
         query HeroMatchup($heroId: Short!) {
           heroStats {
-            matchUp(heroId: $heroId, bracketBasicIds: [HERALD_GUARDIAN, CRUSADER_ARCHON]) {
+            matchUp(heroId: $heroId, take: 150) {
               vs {
                 heroId2
                 winsAverage
