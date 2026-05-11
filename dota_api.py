@@ -7,16 +7,26 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class DotaAPI:
+    # OpenDota item IDs for Aghanim's Scepter and Shard.
+    # These items' real effects are hero-dependent and must be resolved
+    # against /constants/aghs_desc using the carry's hero_id.
+    AGHS_SCEPTER_ITEM_ID = 108
+    AGHS_SHARD_ITEM_ID = 609
+
     def __init__(self):
         self.hero_map = {}
         self.item_map = {}
+        # Per-hero Aghs/Shard data, keyed by hero_id (int).
+        # Each value is a dict with keys: has_scepter, scepter_desc, scepter_skill_name,
+        # has_shard, shard_desc, shard_skill_name.
+        self.aghs_map = {}
         self.base_url = "https://api.opendota.com/api"
         self._initialized = False
 
     async def initialize(self):
         if self._initialized:
             return
-            
+
         async with aiohttp.ClientSession() as session:
             try:
                 # Fetch heroes
@@ -28,28 +38,36 @@ class DotaAPI:
                     else:
                         logger.error(f"Failed to fetch heroes: {resp.status}")
 
-                # Fetch items to map IDs to Display Names
+                # Fetch items. Store the live effect-bearing fields so we can
+                # ground the LLM in current patch text instead of its training memory.
                 async with session.get(f"{self.base_url}/constants/items") as resp:
                     if resp.status == 200:
                         items = await resp.json()
                         self.item_map = {}
                         for key, value in items.items():
                             if "id" in value and "dname" in value:
-                                # Safely extract the item description/hint
-                                hint = value.get("hint")
-                                desc = ""
-                                if isinstance(hint, list):
-                                    desc = " ".join(str(h) for h in hint)
-                                elif isinstance(hint, str):
-                                    desc = hint
-                                
                                 self.item_map[str(value["id"])] = {
                                     "dname": value["dname"],
-                                    "desc": desc
+                                    # abilities[].description is the gold: current
+                                    # active/passive effect text with numbers inlined.
+                                    "abilities": value.get("abilities") or [],
+                                    # attrib[].display contains stat lines like
+                                    # "+ {value} Strength" — current patch numbers.
+                                    "attrib": value.get("attrib") or [],
                                 }
                     else:
                         logger.error(f"Failed to fetch items: {resp.status}")
-                
+
+                # Fetch per-hero Aghanim's Scepter / Shard effects.
+                # The base Aghs/Shard items only carry generic stats — the actual
+                # gameplay effect is defined per hero here.
+                async with session.get(f"{self.base_url}/constants/aghs_desc") as resp:
+                    if resp.status == 200:
+                        aghs_list = await resp.json()
+                        self.aghs_map = {entry["hero_id"]: entry for entry in aghs_list if "hero_id" in entry}
+                    else:
+                        logger.error(f"Failed to fetch aghs_desc: {resp.status}")
+
                 self._initialized = True
             except Exception as e:
                 logger.error(f"Error initializing OpenDota API: {e}")
@@ -65,6 +83,63 @@ class DotaAPI:
                 return h_id
         return None
 
+    def _format_item_effect(self, item_id: int, hero_id: int) -> str:
+        """
+        Build a one-line effect description for an item using live OpenDota
+        constants data. The LLM uses this to ground its 'why' reasoning in
+        current patch behavior instead of stale training memory.
+
+        For Aghanim's Scepter and Shard the effect is hero-dependent, so we
+        look it up in self.aghs_map keyed by hero_id.
+        """
+        # Hero-specific override for Aghs Scepter / Shard.
+        if item_id in (self.AGHS_SCEPTER_ITEM_ID, self.AGHS_SHARD_ITEM_ID):
+            aghs_entry = self.aghs_map.get(hero_id)
+            if aghs_entry:
+                if item_id == self.AGHS_SCEPTER_ITEM_ID and aghs_entry.get("has_scepter"):
+                    name = aghs_entry.get("scepter_skill_name") or "Aghs Upgrade"
+                    desc = (aghs_entry.get("scepter_desc") or "").strip()
+                    if desc:
+                        return f"AGHS ({name}): {desc}"
+                if item_id == self.AGHS_SHARD_ITEM_ID and aghs_entry.get("has_shard"):
+                    name = aghs_entry.get("shard_skill_name") or "Shard Upgrade"
+                    desc = (aghs_entry.get("shard_desc") or "").strip()
+                    if desc:
+                        return f"SHARD ({name}): {desc}"
+            # If no per-hero data, fall through to the generic item text.
+
+        info = self.item_map.get(str(item_id))
+        if not info:
+            return ""
+
+        parts = []
+
+        # Active/passive abilities — the most patch-volatile piece. Skip the
+        # generic "Ability Upgrade" placeholders that Aghs/Shard carry.
+        for ab in info.get("abilities", []):
+            title = (ab.get("title") or "").strip()
+            description = (ab.get("description") or "").strip()
+            if not description or title == "Ability Upgrade":
+                continue
+            kind = (ab.get("type") or "").upper()  # ACTIVE / PASSIVE / TOGGLE
+            # Collapse multi-line descriptions into one line for prompt density.
+            description = " ".join(description.split())
+            prefix = f"{kind} {title}".strip()
+            parts.append(f"{prefix}: {description}" if prefix else description)
+
+        # Stat lines from attrib[].display (only entries with a display template).
+        stat_lines = []
+        for a in info.get("attrib", []):
+            display = a.get("display")
+            value = a.get("value")
+            if not display or value is None:
+                continue
+            stat_lines.append(str(display).replace("{value}", str(value)).strip())
+        if stat_lines:
+            parts.append("Stats: " + ", ".join(stat_lines))
+
+        return " | ".join(parts)
+
     async def get_meta_items(self, hero_name: str) -> str:
         if not self._initialized:
             await self.initialize()
@@ -76,9 +151,13 @@ class DotaAPI:
 
         async with aiohttp.ClientSession() as session:
             try:
-                async with session.get(f"{self.base_url}/heroes/{hero_id}/item_popularity") as resp:
+                # NOTE: OpenDota's path is camelCase `itemPopularity`. The previous
+                # snake_case spelling returned 404, which silently disabled the
+                # whole live-meta feature and made the bot fall back to the LLM's
+                # training memory — the root cause of stale item explanations.
+                async with session.get(f"{self.base_url}/heroes/{hero_id}/itemPopularity") as resp:
                     if resp.status != 200:
-                        logger.error(f"Failed to fetch item popularity for hero {hero_id}")
+                        logger.error(f"Failed to fetch item popularity for hero {hero_id}: {resp.status}")
                         return ""
 
                     data = await resp.json()
@@ -86,7 +165,8 @@ class DotaAPI:
                     seen_items = set()
 
                     for phase, label in [
-                        ('start_game_items', 'Early'),
+                        ('start_game_items', 'Starting'),
+                        ('early_game_items', 'Early'),
                         ('mid_game_items', 'Mid'),
                         ('late_game_items', 'Late'),
                     ]:
@@ -98,9 +178,13 @@ class DotaAPI:
                                 dname = item_info["dname"]
                                 if dname not in seen_items:
                                     seen_items.add(dname)
-                                    popular_items.append(f"[{label}] {dname}")
+                                    effect = self._format_item_effect(int(item_id), hero_id)
+                                    if effect:
+                                        popular_items.append(f"[{label}] {dname} — {effect}")
+                                    else:
+                                        popular_items.append(f"[{label}] {dname}")
 
-                    return " | ".join(popular_items) if popular_items else ""
+                    return "\n".join(popular_items) if popular_items else ""
             except Exception as e:
                 logger.error(f"Error fetching meta items: {e}")
                 return ""
