@@ -46,6 +46,11 @@ MATCHUP GROUND TRUTH: You will receive live win-rate data for the carry vs each 
 
 LIVE META ADAPTATION: You will receive live meta item data including early, mid, and late game phases. Integrate these items into your build if they solve the threats identified in the logic above. Do not blindly suggest them if they get directly countered by the enemy draft.
 
+ITEM EFFECT GROUNDING (CRITICAL): Each item in the [LIVE META ITEMS] block is followed by its CURRENT-PATCH effect text from live game data. This is the source of truth and overrides anything in your training data. When you write the "why" line for any item:
+- Describe the item's effect using ONLY the live text provided. Never describe an effect from memory.
+- This is especially important for Aghanim's Scepter and Aghanim's Shard, whose effects are hero-specific and change frequently. Use the AGHS / SHARD line exactly as given.
+- If you recommend an item that is NOT in the [LIVE META ITEMS] block (e.g., a situational counter-pick), describe its role generically — do NOT cite specific numbers, ability names, or unique effects, because your training data may be stale.
+
 Respond with EXACTLY this structure:
 
 🎯 DRAFT IDENTITY
